@@ -249,6 +249,63 @@ void clampedExpVector(float* values, int* exponents, float* output, int N) {
   // Your solution should work for any value of
   // N and VECTOR_WIDTH, not just when VECTOR_WIDTH divides N
   //
+
+  __cs149_vec_int zero_i = _cs149_vset_int(0);
+  __cs149_vec_int one_i = _cs149_vset_int(1);
+  __cs149_vec_float nine_999 = _cs149_vset_float(9.999999f);
+  __cs149_mask mask_one = _cs149_init_ones(VECTOR_WIDTH); // 1 的 mask
+
+  __cs149_vec_float s_x;
+  __cs149_vec_int s_e;
+  __cs149_vec_float results;
+
+  __cs149_mask mask_lt_N;
+  __cs149_mask mask_unfinished;
+  __cs149_mask greater_than_9;
+  __cs149_mask mask_zero_exp;
+
+
+  for(int i = 0; i < N; i += VECTOR_WIDTH) {
+    mask_lt_N = _cs149_init_ones(min(N-i, VECTOR_WIDTH));
+
+    _cs149_vload_float(s_x, values + i, mask_lt_N);
+    _cs149_vload_int(s_e, exponents + i, mask_lt_N);
+    _cs149_vset_float(results, 1.f, mask_lt_N);
+
+    mask_unfinished = mask_lt_N;
+
+    //因为指令只支持根据判断条件赋1，所以先声明全0mask，再根据指数是否为1修改mask，最后反转mask之后计算
+    greater_than_9 = _cs149_init_ones(0); //全部初始化为0
+
+    _cs149_veq_int(mask_zero_exp, s_e, zero_i, mask_one); // 如果 exponent == 0, 则标记为 1 表示计算结束，否则标记为 0
+    mask_zero_exp = _cs149_mask_not(mask_zero_exp); // 反转，如果 exp 为 0, 则表示计算结束，用 0 表示
+    mask_unfinished = _cs149_mask_and(mask_unfinished, mask_zero_exp); // 如果指数为 0, 则表示计算结束
+    mask_unfinished = _cs149_mask_and(mask_unfinished, mask_lt_N); // 保险起见，再和 mask_lt_N 取交集，保证索引无效的部分为 0
+
+    while(_cs149_cntbits(mask_unfinished) > 0) {
+      _cs149_vmult_float(results, results, s_x, mask_unfinished);
+      _cs149_vsub_int(s_e, s_e, one_i, mask_unfinished);
+
+      //判断是否超过9.99999f并修改数值和标志位
+      _cs149_vgt_float(greater_than_9, results, nine_999, mask_unfinished);
+      _cs149_vset_float(results, 9.999999f, greater_than_9);
+
+      //更新mask_ unfinished
+      mask_zero_exp = _cs149_init_ones(0); //全0掩码 生成全0掩码更容易
+      _cs149_veq_int(mask_zero_exp, s_e, zero_i, mask_one); //exponent == 0 则标记为1, 表示计算结束
+
+      __cs149_mask new_finished = _cs149_mask_or(mask_zero_exp, greater_than_9);  //指数为0或结果大于9.99999f
+      
+      mask_zero_exp = _cs149_mask_not(new_finished);  //反转掩码 1表示没结束 0表示结束了
+      mask_unfinished = _cs149_mask_and(mask_zero_exp, mask_unfinished);  //之前的mask与上新计算的mask
+      mask_unfinished = _cs149_mask_and(mask_unfinished, mask_lt_N);  //保证索引无效的部分也为0
+    }
+    _cs149_vstore_float(output+i, results, mask_lt_N); // 将结果存储到 output 中
+
+    addUserLog("clampedExpVector");
+
+  }
+  
   
 }
 
@@ -271,10 +328,23 @@ float arraySumVector(float* values, int N) {
   // CS149 STUDENTS TODO: Implement your vectorized version of arraySumSerial here
   //
   
-  for (int i=0; i<N; i+=VECTOR_WIDTH) {
+  __cs149_vec_float v_sum;
+  __cs149_mask mask_one = _cs149_init_ones(VECTOR_WIDTH);
+  _cs149_vset_float(v_sum, 0.f, mask_one);
 
+  __cs149_vec_float v_elems;
+
+
+  for (int i=0; i<N; i+=VECTOR_WIDTH) {
+    _cs149_vload_float(v_elems, values + i, mask_one);
+    _cs149_vadd_float(v_sum, v_sum, v_elems, mask_one);
   }
 
-  return 0.0;
+  float sum = 0.f;
+  for(auto val : v_sum.value) {
+    sum += val;
+  }
+
+  return sum;
 }
 
