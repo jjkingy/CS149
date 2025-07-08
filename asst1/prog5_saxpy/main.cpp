@@ -32,7 +32,7 @@ using namespace ispc;
 int main() {
 
     const unsigned int N = 20 * 1000 * 1000; // 20 M element vectors (~80 MB)
-    const unsigned int TOTAL_BYTES = 4 * N * sizeof(float);
+    const unsigned int TOTAL_BYTES = 4 * N * sizeof(float); //X Y读一次 results读写等于两次读 所以是 4*N
     const unsigned int TOTAL_FLOPS = 2 * N;
 
     float scale = 2.f;

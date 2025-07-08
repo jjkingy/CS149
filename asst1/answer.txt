@@ -8,3 +8,44 @@ problem 2
 使用向量化进行加载修改等操作即可，代码没有难度
 观察结果发现 VECTOR_WITH越大 Vector Utilization利用率会降低：因为VECTOR_WIDTH越大，等待"空转"的向量就更多，利用率就会降低
 所以SIMD适合计算量一样，执行操作完全一样的指令运行，利用率才能最高
+
+problem3
+ISPC 使用输出8宽度的向量指令，理论上速度应该提升8倍，但是实际只有4.78x
+原因: 负载不均衡，不同的区域计算复杂度不同，有些区域迭代过多就会导致有些区域SIMD lane空闲
+      内存访问不均匀，内存不是严格顺序访问，会影响缓存效率
+
+task数量 ≈ 硬件最大线程数时，会得到最大加速比
+原因：每个逻辑核心可以调度一个任务，如果task少于核心数量，就会有物理核心空闲，但是如果task溢出，会出现争用的情况
+
+threads和tasks的区别:
+thread有自己的线程栈、上下文等，线程切换调度会有开销，线程越多，开销越大
+tasks是轻量级逻辑任务，系统资源开销小，切换开销小，而且一个task不一定只放在一个逻辑核心上
+
+problem4
+[sqrt serial]:          [919.559] ms
+[sqrt ispc]:            [230.134] ms
+[sqrt task ispc]:       [10.306] ms
+                                (4.00x speedup from ISPC)
+                                (89.22x speedup from task ISPC)
+
+根据作业给的收敛图
+加速将SIMD一次计算的每个通道元素的迭代次数的差异最小化
+values[i] = 0.5f + (2.0f - 0.5f) * static_cast<float>(rand()) / RAND_MAX;
+
+加速将SIMD一次计算的每个通道元素的迭代次数的差异最大化并且使用分支
+if(i % 8 == 0) {
+            values[i] = 2.5;
+        } else {
+            values[i] = 1.0;
+        }
+
+problem5
+[saxpy ispc]:           [19.304] ms     [15.438] GB/s   [2.072] GFLOPS
+[saxpy task ispc]:      [6.432] ms      [46.335] GB/s   [6.219] GFLOPS
+                                (3.00x speedup from use of tasks)
+
+为什么使用 tasks（多核）后加速比不高？
+因为 saxpy 的性能主要受到内存带宽的限制，而非计算性能限制。当线程数增加后，所有核心同时访问内存，会很快耗尽内存带宽，无法继续获得线性加速。此外，线程调度和同步开销也会轻微影响性能。
+
+为什么还要用多核 tasks？
+tasks 的主要目的是充分利用多核 CPU 的并行计算能力。在计算密集型任务中，这可以获得很大收益；即使在内存受限任务中，适当的 task
